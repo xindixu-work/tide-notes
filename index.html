@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌊 潮汐笔记</title>
+<style>
+  :root {
+    --ink: #1b2430;
+    --ink-soft: #4a5568;
+    --paper: #f3f1ec;
+    --paper-raised: #fbfaf7;
+    --line: #d9d4c8;
+    --tide: #2f5d6b;
+    --tide-light: #e3edee;
+    --amber: #c4732e;
+    --amber-light: #f6e6d6;
+    --danger: #a8412f;
+    --danger-light: #f5e2dd;
+    --good: #3d6b4a;
+    --good-light: #e3ede5;
+    --font-display: 'Zhuque', 'Songti SC', 'Noto Serif SC', serif;
+    --font-body: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    --font-mono: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+  }
+
+  /* ===== Header ===== */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .header h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+    margin: 0;
+  }
+  .header .date {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin: 0 0 26px;
+    line-height: 1.6;
+  }
+
+  /* ===== Tide gauge (signature element) ===== */
+  .gauge-card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 24px 22px 20px;
+    margin-bottom: 18px;
+  }
+  .gauge-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .gauge-title {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+  }
+  .gauge-range-pick {
+    display: flex;
+    gap: 4px;
+    background: var(--paper);
+    border-radius: 20px;
+    padding: 3px;
+    border: 1px solid var(--line);
+  }
+  .range-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    border: none;
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .range-btn.active {
+    background: var(--ink);
+    color: var(--paper-raised);
+  }
+
+  .tide-track {
+    position: relative;
+    height: 64px;
+    margin: 8px 0 4px;
+  }
+  .tide-rail {
+    position: absolute;
+    top: 28px;
+    left: 0;
+    right: 0;
+    height: 8px;
+    background: var(--line);
+    border-radius: 4px;
+  }
+  .tide-zone {
+    position: absolute;
+    top: 28px;
+    height: 8px;
+    background: var(--good);
+    opacity: 0.35;
+    border-radius: 4px;
+  }
+  .tide-marker {
+    position: absolute;
+    top: 14px;
+    width: 2px;
+    height: 36px;
+    background: var(--ink-soft);
+    opacity: 0.25;
+  }
+  .tide-dot {
+    position: absolute;
+    top: 16px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    transform: translateX(-50%);
+    border: 3px solid var(--paper-raised);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: left 0.4s ease;
+  }
+  .tide-ticklabel {
+    position: absolute;
+    top: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-soft);
+    transform: translateX(-50%);
+  }
+  .tide-bottomlabel {
+    position: absolute;
+    bottom: -2px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-soft);
+    transform: translateX(-50%);
+  }
+
+  .gauge-readout {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--line);
+  }
+  .readout-item .num {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .readout-item .lbl {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .readout-item { text-align: left; }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    margin-top: 14px;
+    font-weight: 500;
+  }
+  .status-pill.good { background: var(--good-light); color: var(--good); }
+  .status-pill.warn { background: var(--amber-light); color: var(--amber); }
+  .status-pill.bad { background: var(--danger-light); color: var(--danger); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ===== Advice card (suggested leave time) ===== */
+  .advice-card {
+    background: var(--tide);
+    color: var(--paper-raised);
+    border-radius: 4px;
+    padding: 20px 22px;
+    margin-bottom: 18px;
+  }
+  .advice-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .advice-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.75;
+  }
+  .advice-time {
+    font-family: var(--font-mono);
+    font-size: 32px;
+    font-weight: 700;
+    margin: 4px 0 6px;
+  }
+  .advice-sub {
+    font-size: 12px;
+    opacity: 0.85;
+    line-height: 1.6;
+  }
+  .advice-sub b { font-weight: 600; }
+
+  /* ===== Stats grid (days counted, quarter progress) ===== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .stat-box {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px 18px;
+  }
+  .stat-box .sb-num {
+    font-family: var(--font-mono);
+    font-size: 24px;
+    font-weight: 600;
+  }
+  .stat-box .sb-num .sb-unit {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ink-soft);
+    margin-left: 2px;
+  }
+  .stat-box .sb-label {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+  .stat-box .sb-detail {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+  }
+
+  /* ===== Backup / restore ===== */
+  .backup-row {
+    display: flex;
+    gap: 10px;
+  }
+  .backup-btn {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid var(--line);
+    background: var(--paper-raised);
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--ink);
+    text-align: center;
+  }
+  .backup-msg {
+    font-size: 12px;
+    margin-top: 8px;
+    display: none;
+  }
+
+  /* ===== Punch buttons ===== */
+  .punch-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .punch-btn {
+    border: 1px solid var(--line);
+    background: var(--paper-raised);
+    border-radius: 4px;
+    padding: 18px 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .punch-btn:active { transform: scale(0.98); }
+  .punch-btn .pb-label {
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 0.05em;
+  }
+  .punch-btn .pb-time {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 600;
+    margin: 6px 0 2px;
+  }
+  .punch-btn .pb-hint {
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+  .punch-btn.in { border-left: 3px solid var(--tide); }
+  .punch-btn.out { border-left: 3px solid var(--amber); }
+  .punch-btn.done {
+    background: var(--paper);
+    cursor: default;
+  }
+  .punch-btn.done:active { transform: none; }
+
+  .edit-row {
+    display: none;
+    margin-top: 10px;
+    gap: 6px;
+    align-items: center;
+  }
+  .edit-row.show { display: flex; }
+  .edit-row input[type="time"] {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 4px 6px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--paper-raised);
+    flex: 1;
+  }
+  .edit-row button {
+    font-size: 11px;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    background: var(--paper-raised);
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+  .edit-toggle {
+    font-size: 11px;
+    color: var(--tide);
+    text-decoration: underline;
+    cursor: pointer;
+    margin-top: 8px;
+    display: inline-block;
+  }
+
+  /* ===== Section: targets ===== */
+  .section-title {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    margin: 28px 0 10px;
+  }
+  .target-card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .target-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+  }
+  .target-row + .target-row { border-top: 1px solid var(--line); }
+  .target-row .tr-name { font-size: 13px; }
+  .target-row .tr-vals {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .target-row input[type="time"] {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 4px 6px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--paper);
+    width: 90px;
+  }
+  .target-row .tr-sep { color: var(--ink-soft); font-size: 12px; }
+
+  /* ===== History ===== */
+  .history-list {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .history-row {
+    display: grid;
+    grid-template-columns: 70px 1fr 1fr 32px;
+    gap: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    align-items: center;
+  }
+  .history-row .hr-del {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+    border-radius: 3px;
+    text-align: center;
+  }
+  .history-row .hr-del:hover {
+    background: var(--danger-light);
+    color: var(--danger);
+  }
+  .history-row.head .hr-del { visibility: hidden; }
+  .history-row + .history-row { border-top: 1px solid var(--line); }
+  .history-row.head {
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--paper);
+  }
+  .history-row .hr-date { font-family: var(--font-mono); color: var(--ink-soft); }
+  .history-row .hr-time { font-family: var(--font-mono); }
+  .history-row .hr-time.empty { color: var(--line); }
+  .empty-state {
+    padding: 30px 16px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+
+  .footer-note {
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-top: 30px;
+    line-height: 1.6;
+  }
+
+  button { font-family: inherit; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <h1>🌊 潮汐笔记</h1>
+    <div class="date" id="todayDate"></div>
+  </div>
+  <p class="subtitle">记录每天的潮起潮落，把水位稳稳维持在安全区间。</p>
+
+  <!-- TIDE GAUGE -->
+  <div class="gauge-card">
+    <div class="gauge-label-row">
+      <span class="gauge-title">晨潮记录</span>
+      <div class="gauge-range-pick" id="rangeIn">
+        <button class="range-btn" data-range="7">7天</button>
+        <button class="range-btn" data-range="30">30天</button>
+        <button class="range-btn active" data-range="quarter">本季</button>
+      </div>
+    </div>
+    <div class="tide-track" id="trackIn"></div>
+    <div class="gauge-readout">
+      <div class="readout-item">
+        <div class="num" id="avgInVal">--:--</div>
+        <div class="lbl">平均时刻</div>
+      </div>
+      <div class="readout-item">
+        <div class="num" id="avgInDiff">--</div>
+        <div class="lbl">距目标区间</div>
+      </div>
+    </div>
+    <div class="status-pill" id="statusIn"><span class="status-dot"></span><span>暂无数据</span></div>
+  </div>
+
+  <div class="gauge-card">
+    <div class="gauge-label-row">
+      <span class="gauge-title">暮潮记录</span>
+      <div class="gauge-range-pick" id="rangeOut">
+        <button class="range-btn" data-range="7">7天</button>
+        <button class="range-btn" data-range="30">30天</button>
+        <button class="range-btn active" data-range="quarter">本季</button>
+      </div>
+    </div>
+    <div class="tide-track" id="trackOut"></div>
+    <div class="gauge-readout">
+      <div class="readout-item">
+        <div class="num" id="avgOutVal">--:--</div>
+        <div class="lbl">平均时刻</div>
+      </div>
+      <div class="readout-item">
+        <div class="num" id="avgOutDiff">--</div>
+        <div class="lbl">距目标区间</div>
+      </div>
+    </div>
+    <div class="status-pill" id="statusOut"><span class="status-dot"></span><span>暂无数据</span></div>
+  </div>
+
+  <!-- ADVICE: suggested leave time for remaining workdays -->
+  <div class="advice-card">
+    <div class="advice-top">
+      <span class="advice-label">本季度剩余工作日建议</span>
+    </div>
+    <div class="advice-time" id="adviceTime">--:--</div>
+    <div class="advice-sub" id="adviceSub">数据不足，先记录几天再看建议</div>
+  </div>
+
+  <!-- STATS: days counted this month / quarter, days left -->
+  <div class="stats-grid">
+    <div class="stat-box">
+      <div class="sb-num" id="statMonthDays">0<span class="sb-unit">天</span></div>
+      <div class="sb-label">本月完整记录天数</div>
+    </div>
+    <div class="stat-box">
+      <div class="sb-num" id="statQuarterDays">0<span class="sb-unit">天</span></div>
+      <div class="sb-label">本季度完整记录天数</div>
+    </div>
+    <div class="stat-box">
+      <div class="sb-num" id="statDaysLeft">0<span class="sb-unit">个工作日</span></div>
+      <div class="sb-label">距本季度结束</div>
+    </div>
+    <div class="stat-box">
+      <div class="sb-num" id="statDiffMin">--</div>
+      <div class="sb-label">当前距下班目标</div>
+    </div>
+  </div>
+
+  <!-- PUNCH BUTTONS -->
+  <div class="punch-row">
+    <div>
+      <button class="punch-btn in" id="punchInBtn">
+        <div class="pb-label">🌅 记录晨潮</div>
+        <div class="pb-time" id="punchInTime">点击记录</div>
+        <div class="pb-hint" id="punchInHint">目标 09:50</div>
+      </button>
+      <span class="edit-toggle" id="editInToggle">手动修改</span>
+      <div class="edit-row" id="editInRow">
+        <input type="time" id="editInInput">
+        <button id="editInSave">保存</button>
+      </div>
+    </div>
+    <div>
+      <button class="punch-btn out" id="punchOutBtn">
+        <div class="pb-label">🌇 记录暮潮</div>
+        <div class="pb-time" id="punchOutTime">点击记录</div>
+        <div class="pb-hint" id="punchOutHint">目标 19:45-20:00</div>
+      </button>
+      <span class="edit-toggle" id="editOutToggle">手动修改</span>
+      <div class="edit-row" id="editOutRow">
+        <input type="time" id="editOutInput">
+        <button id="editOutSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BACKFILL -->
+  <div class="section-title">📝 补录某一天</div>
+  <div class="target-card">
+    <div class="target-row" style="border-top:none;">
+      <span class="tr-name">日期</span>
+      <div class="tr-vals">
+        <input type="date" id="backfillDate" style="width:130px;">
+      </div>
+    </div>
+    <div class="target-row">
+      <span class="tr-name">🌅 晨潮</span>
+      <div class="tr-vals">
+        <input type="time" id="backfillIn">
+      </div>
+    </div>
+    <div class="target-row">
+      <span class="tr-name">🌇 暮潮</span>
+      <div class="tr-vals">
+        <input type="time" id="backfillOut">
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button id="backfillSave" style="flex:1; padding:9px; background:var(--ink); color:var(--paper-raised); border:none; border-radius:3px; font-size:13px; cursor:pointer;">保存这天</button>
+      <button id="backfillLoad" style="padding:9px 14px; background:var(--paper); color:var(--ink-soft); border:1px solid var(--line); border-radius:3px; font-size:13px; cursor:pointer;">读取已有</button>
+    </div>
+    <div id="backfillMsg" style="font-size:12px; color:var(--good); margin-top:8px; display:none;"></div>
+  </div>
+
+  <!-- TARGETS -->
+  <div class="section-title">目标设置</div>
+  <div class="target-card">
+    <div class="target-row">
+      <span class="tr-name">上班目标</span>
+      <div class="tr-vals">
+        <input type="time" id="targetInMin" value="09:45">
+        <span class="tr-sep">–</span>
+        <input type="time" id="targetInMax" value="09:55">
+      </div>
+    </div>
+    <div class="target-row">
+      <span class="tr-name">下班目标</span>
+      <div class="tr-vals">
+        <input type="time" id="targetOutMin" value="19:45">
+        <span class="tr-sep">–</span>
+        <input type="time" id="targetOutMax" value="20:00">
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="section-title">最近记录</div>
+  <div class="history-list" id="historyList"></div>
+
+  <div class="section-title">💾 备份与同步</div>
+  <div class="target-card">
+    <div class="backup-row">
+      <button class="backup-btn" id="exportBtn">导出备份文件</button>
+      <button class="backup-btn" id="importBtn">导入备份文件</button>
+      <input type="file" id="importFile" accept=".json" style="display:none;">
+    </div>
+    <div class="backup-msg" id="backupMsg"></div>
+  </div>
+
+  <div class="footer-note">
+    数据仅保存在本设备浏览器本地，不会上传到任何服务器。<br>
+    电脑和手机之间不会自动同步，请用上方"导出/导入备份文件"手动搬运数据。<br>
+    季度起始日：每年 1/4/7/10 月 1 日。
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'punch_records_v1';
+  const TARGET_KEY = 'punch_targets_v1';
+
+  function loadRecords(){
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch(e){ return {}; }
+  }
+  function saveRecords(records){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  }
+  function loadTargets(){
+    try {
+      const raw = localStorage.getItem(TARGET_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch(e){ return null; }
+  }
+  function saveTargets(t){
+    localStorage.setItem(TARGET_KEY, JSON.stringify(t));
+  }
+
+  function todayKey(d){
+    d = d || new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  function fmtTime(d){
+    const h = String(d.getHours()).padStart(2,'0');
+    const m = String(d.getMinutes()).padStart(2,'0');
+    return `${h}:${m}`;
+  }
+  function timeToMinutes(t){
+    if(!t) return null;
+    const [h,m] = t.split(':').map(Number);
+    return h*60+m;
+  }
+  function minutesToTime(mins){
+    mins = Math.round(mins);
+    const h = Math.floor(mins/60);
+    const m = mins%60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  }
+
+  function getQuarterStart(d){
+    d = d || new Date();
+    const q = Math.floor(d.getMonth()/3);
+    return new Date(d.getFullYear(), q*3, 1);
+  }
+
+  function getQuarterEnd(d){
+    d = d || new Date();
+    const q = Math.floor(d.getMonth()/3);
+    // first day of next quarter, minus 1 day
+    const nextQStart = new Date(d.getFullYear(), q*3 + 3, 1);
+    nextQStart.setDate(nextQStart.getDate() - 1);
+    nextQStart.setHours(23,59,59,999);
+    return nextQStart;
+  }
+
+  function getMonthStart(d){
+    d = d || new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+
+  function isWeekday(d){
+    const day = d.getDay();
+    return day !== 0 && day !== 6;
+  }
+
+  // Count weekdays between two dates inclusive (both Date objects, time ignored)
+  function countWeekdays(start, end){
+    let count = 0;
+    const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    while(cur <= last){
+      if(isWeekday(cur)) count++;
+      cur.setDate(cur.getDate()+1);
+    }
+    return count;
+  }
+
+  let records = loadRecords();
+  let targets = loadTargets() || {
+    inMin: '09:45', inMax: '09:55',
+    outMin: '19:45', outMax: '20:00'
+  };
+
+  let currentRangeIn = 'quarter';
+  let currentRangeOut = 'quarter';
+
+  // ===== Init date =====
+  document.getElementById('todayDate').textContent =
+    new Date().toLocaleDateString('zh-CN', { month:'long', day:'numeric', weekday:'short' });
+
+  // ===== Init target inputs =====
+  document.getElementById('targetInMin').value = targets.inMin;
+  document.getElementById('targetInMax').value = targets.inMax;
+  document.getElementById('targetOutMin').value = targets.outMin;
+  document.getElementById('targetOutMax').value = targets.outMax;
+
+  [['targetInMin','inMin'],['targetInMax','inMax'],['targetOutMin','outMin'],['targetOutMax','outMax']].forEach(([id,key])=>{
+    document.getElementById(id).addEventListener('change', (e)=>{
+      targets[key] = e.target.value;
+      saveTargets(targets);
+      render();
+    });
+  });
+
+  // ===== Punch buttons =====
+  function refreshPunchButtons(){
+    const key = todayKey();
+    const rec = records[key] || {};
+    const inBtn = document.getElementById('punchInBtn');
+    const outBtn = document.getElementById('punchOutBtn');
+
+    if(rec.in){
+      document.getElementById('punchInTime').textContent = rec.in;
+      document.getElementById('punchInHint').textContent = '已打卡，可点"手动修改"';
+      inBtn.classList.add('done');
+    } else {
+      document.getElementById('punchInTime').textContent = '点击打卡';
+      document.getElementById('punchInHint').textContent = `目标 ${targets.inMin}-${targets.inMax}`;
+      inBtn.classList.remove('done');
+    }
+    if(rec.out){
+      document.getElementById('punchOutTime').textContent = rec.out;
+      document.getElementById('punchOutHint').textContent = '已打卡，可点"手动修改"';
+      outBtn.classList.add('done');
+    } else {
+      document.getElementById('punchOutTime').textContent = '点击打卡';
+      document.getElementById('punchOutHint').textContent = `目标 ${targets.outMin}-${targets.outMax}`;
+      outBtn.classList.remove('done');
+    }
+  }
+
+  document.getElementById('punchInBtn').addEventListener('click', ()=>{
+    const key = todayKey();
+    if(!records[key]) records[key] = {};
+    if(records[key].in) return; // already punched, use manual edit
+    records[key].in = fmtTime(new Date());
+    saveRecords(records);
+    refreshPunchButtons();
+    render();
+  });
+  document.getElementById('punchOutBtn').addEventListener('click', ()=>{
+    const key = todayKey();
+    if(!records[key]) records[key] = {};
+    if(records[key].out) return;
+    records[key].out = fmtTime(new Date());
+    saveRecords(records);
+    refreshPunchButtons();
+    render();
+  });
+
+  // Manual edit toggles
+  function setupEdit(toggleId, rowId, inputId, saveId, field){
+    document.getElementById(toggleId).addEventListener('click', ()=>{
+      const row = document.getElementById(rowId);
+      const key = todayKey();
+      const rec = records[key] || {};
+      document.getElementById(inputId).value = rec[field] || '';
+      row.classList.toggle('show');
+    });
+    document.getElementById(saveId).addEventListener('click', ()=>{
+      const key = todayKey();
+      if(!records[key]) records[key] = {};
+      const val = document.getElementById(inputId).value;
+      if(val){
+        records[key][field] = val;
+        saveRecords(records);
+        refreshPunchButtons();
+        render();
+      }
+      document.getElementById(rowId).classList.remove('show');
+    });
+  }
+  setupEdit('editInToggle','editInRow','editInInput','editInSave','in');
+  setupEdit('editOutToggle','editOutRow','editOutInput','editOutSave','out');
+
+  // ===== Range pickers =====
+  document.getElementById('rangeIn').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.range-btn');
+    if(!btn) return;
+    currentRangeIn = btn.dataset.range;
+    [...document.getElementById('rangeIn').children].forEach(b=>b.classList.toggle('active', b===btn));
+    render();
+  });
+  document.getElementById('rangeOut').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.range-btn');
+    if(!btn) return;
+    currentRangeOut = btn.dataset.range;
+    [...document.getElementById('rangeOut').children].forEach(b=>b.classList.toggle('active', b===btn));
+    render();
+  });
+
+  // ===== Backfill (manual entry for past dates) =====
+  document.getElementById('backfillDate').value = todayKey();
+
+  document.getElementById('backfillLoad').addEventListener('click', ()=>{
+    const dateVal = document.getElementById('backfillDate').value;
+    if(!dateVal) return;
+    const rec = records[dateVal] || {};
+    document.getElementById('backfillIn').value = rec.in || '';
+    document.getElementById('backfillOut').value = rec.out || '';
+    showBackfillMsg(rec.in || rec.out ? '已读取该天记录' : '该天暂无记录，可以新建');
+  });
+
+  document.getElementById('backfillSave').addEventListener('click', ()=>{
+    const dateVal = document.getElementById('backfillDate').value;
+    if(!dateVal){
+      showBackfillMsg('请先选择日期', true);
+      return;
+    }
+    const inVal = document.getElementById('backfillIn').value;
+    const outVal = document.getElementById('backfillOut').value;
+    if(!inVal && !outVal){
+      showBackfillMsg('至少填一个时间', true);
+      return;
+    }
+    if(!records[dateVal]) records[dateVal] = {};
+    if(inVal) records[dateVal].in = inVal;
+    if(outVal) records[dateVal].out = outVal;
+    saveRecords(records);
+    showBackfillMsg('已保存 ' + dateVal);
+    refreshPunchButtons();
+    render();
+  });
+
+  function showBackfillMsg(text, isError){
+    const el = document.getElementById('backfillMsg');
+    el.textContent = text;
+    el.style.color = isError ? 'var(--danger)' : 'var(--good)';
+    el.style.display = 'block';
+    clearTimeout(el._t);
+    el._t = setTimeout(()=>{ el.style.display = 'none'; }, 2500);
+  }
+
+  // ===== Delete a day's record (event delegation on history list) =====
+  document.getElementById('historyList').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.hr-del');
+    if(!btn || !btn.dataset.date) return;
+    const dateVal = btn.dataset.date;
+    if(confirm(`删除 ${dateVal} 的记录？`)){
+      delete records[dateVal];
+      saveRecords(records);
+      refreshPunchButtons();
+      render();
+    }
+  });
+
+  // ===== Export / Import backup =====
+  function showBackupMsg(text, isError){
+    const el = document.getElementById('backupMsg');
+    el.textContent = text;
+    el.style.color = isError ? 'var(--danger)' : 'var(--good)';
+    el.style.display = 'block';
+    clearTimeout(el._t);
+    el._t = setTimeout(()=>{ el.style.display = 'none'; }, 3000);
+  }
+
+  document.getElementById('exportBtn').addEventListener('click', ()=>{
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      records: records,
+      targets: targets
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = todayKey();
+    a.href = url;
+    a.download = `tide-backup-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showBackupMsg('已导出备份文件，请通过微信/邮件/AirDrop 发送到另一台设备');
+  });
+
+  document.getElementById('importBtn').addEventListener('click', ()=>{
+    document.getElementById('importFile').click();
+  });
+
+  document.getElementById('importFile').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt)=>{
+      try {
+        const data = JSON.parse(evt.target.result);
+        if(!data.records) throw new Error('文件格式不对');
+        const incoming = Object.keys(data.records).length;
+        const merge = confirm(
+          `备份文件中有 ${incoming} 天的记录。\n\n` +
+          `点"确定"= 合并到现有数据（同一天会被备份文件覆盖）\n` +
+          `点"取消"= 放弃导入`
+        );
+        if(!merge) return;
+        records = Object.assign({}, records, data.records);
+        saveRecords(records);
+        if(data.targets){
+          targets = data.targets;
+          saveTargets(targets);
+          document.getElementById('targetInMin').value = targets.inMin;
+          document.getElementById('targetInMax').value = targets.inMax;
+          document.getElementById('targetOutMin').value = targets.outMin;
+          document.getElementById('targetOutMax').value = targets.outMax;
+        }
+        refreshPunchButtons();
+        render();
+        showBackupMsg(`已导入 ${incoming} 天记录`);
+      } catch(err){
+        showBackupMsg('导入失败：文件格式不正确', true);
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  // ===== Stats =====
+  function getRecordsInRange(range){
+    const now = new Date();
+    let startDate;
+    if(range === 'quarter'){
+      startDate = getQuarterStart(now);
+    } else {
+      const days = parseInt(range,10);
+      startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - (days-1));
+      startDate.setHours(0,0,0,0);
+    }
+    const result = [];
+    Object.keys(records).forEach(dateKey=>{
+      const d = new Date(dateKey + 'T00:00:00');
+      if(d >= startDate && d <= now){
+        result.push({date: dateKey, ...records[dateKey]});
+      }
+    });
+    result.sort((a,b)=> a.date < b.date ? 1 : -1);
+    return result;
+  }
+
+  function average(values){
+    if(values.length === 0) return null;
+    const sum = values.reduce((a,b)=>a+b,0);
+    return sum/values.length;
+  }
+
+  function renderGauge(trackId, dotMinutes, zoneMinMin, zoneMinMax, lo, hi){
+    // lo/hi define the gauge's full visual range in minutes-from-midnight
+    const track = document.getElementById(trackId);
+    const span = hi - lo;
+    const pct = (m) => Math.max(0, Math.min(100, ((m - lo)/span)*100));
+
+    let html = '<div class="tide-rail"></div>';
+    // good zone
+    const zLeft = pct(zoneMinMin);
+    const zRight = pct(zoneMinMax);
+    html += `<div class="tide-zone" style="left:${zLeft}%; width:${zRight-zLeft}%;"></div>`;
+
+    // tick labels at lo, mid, hi
+    const ticks = [lo, lo + span/2, hi];
+    ticks.forEach(t=>{
+      html += `<div class="tide-ticklabel" style="left:${pct(t)}%;">${minutesToTime(t)}</div>`;
+    });
+
+    if(dotMinutes !== null){
+      const dotPct = pct(dotMinutes);
+      let color = 'var(--good)';
+      if(dotMinutes < zoneMinMin || dotMinutes > zoneMinMax) color = 'var(--amber)';
+      html += `<div class="tide-marker" style="left:${dotPct}%;"></div>`;
+      html += `<div class="tide-dot" style="left:${dotPct}%; background:${color};"></div>`;
+      html += `<div class="tide-bottomlabel" style="left:${dotPct}%; color:${color}; font-weight:600;">${minutesToTime(dotMinutes)}</div>`;
+    }
+    track.innerHTML = html;
+  }
+
+  function render(){
+    refreshPunchButtons();
+
+    // ---- IN gauge ----
+    const recsIn = getRecordsInRange(currentRangeIn).filter(r=>r.in);
+    const inMins = recsIn.map(r=>timeToMinutes(r.in));
+    const avgIn = average(inMins);
+    const tgtInMin = timeToMinutes(targets.inMin);
+    const tgtInMax = timeToMinutes(targets.inMax);
+
+    renderGauge('trackIn', avgIn, tgtInMin, tgtInMax, tgtInMin - 60, tgtInMax + 30);
+
+    if(avgIn !== null){
+      document.getElementById('avgInVal').textContent = minutesToTime(avgIn);
+      let diffText, diffClass;
+      if(avgIn < tgtInMin){
+        const d = Math.round(tgtInMin - avgIn);
+        diffText = `早 ${d} 分钟`;
+        diffClass = 'warn';
+      } else if(avgIn > tgtInMax){
+        const d = Math.round(avgIn - tgtInMax);
+        diffText = `晚 ${d} 分钟`;
+        diffClass = 'bad';
+      } else {
+        diffText = '区间内';
+        diffClass = 'good';
+      }
+      document.getElementById('avgInDiff').textContent = diffText;
+      const pill = document.getElementById('statusIn');
+      pill.className = 'status-pill ' + diffClass;
+      let msg;
+      if(diffClass === 'good') msg = '稳，维持现状';
+      else if(diffClass === 'warn') msg = '偏卷了，明天可以晚一点到';
+      else msg = '偏晚了，建议提前一些打卡';
+      pill.querySelector('span:last-child').textContent = msg;
+    } else {
+      document.getElementById('avgInVal').textContent = '--:--';
+      document.getElementById('avgInDiff').textContent = '--';
+      const pill = document.getElementById('statusIn');
+      pill.className = 'status-pill';
+      pill.querySelector('span:last-child').textContent = '暂无数据';
+    }
+
+    // ---- OUT gauge ----
+    const recsOut = getRecordsInRange(currentRangeOut).filter(r=>r.out);
+    const outMins = recsOut.map(r=>timeToMinutes(r.out));
+    const avgOut = average(outMins);
+    const tgtOutMin = timeToMinutes(targets.outMin);
+    const tgtOutMax = timeToMinutes(targets.outMax);
+
+    renderGauge('trackOut', avgOut, tgtOutMin, tgtOutMax, tgtOutMin - 45, tgtOutMax + 45);
+
+    if(avgOut !== null){
+      document.getElementById('avgOutVal').textContent = minutesToTime(avgOut);
+      let diffText, diffClass;
+      if(avgOut < tgtOutMin){
+        const d = Math.round(tgtOutMin - avgOut);
+        diffText = `早 ${d} 分钟`;
+        diffClass = 'bad';
+      } else if(avgOut > tgtOutMax){
+        const d = Math.round(avgOut - tgtOutMax);
+        diffText = `晚 ${d} 分钟`;
+        diffClass = 'warn';
+      } else {
+        diffText = '区间内';
+        diffClass = 'good';
+      }
+      document.getElementById('avgOutDiff').textContent = diffText;
+      const pill = document.getElementById('statusOut');
+      pill.className = 'status-pill ' + diffClass;
+      let msg;
+      if(diffClass === 'good') msg = '稳，维持现状';
+      else if(diffClass === 'bad') msg = '走太早了，明天稍微晚点走';
+      else msg = '偏卷了，可以提前一些下班';
+      pill.querySelector('span:last-child').textContent = msg;
+    } else {
+      document.getElementById('avgOutVal').textContent = '--:--';
+      document.getElementById('avgOutDiff').textContent = '--';
+      const pill = document.getElementById('statusOut');
+      pill.className = 'status-pill';
+      pill.querySelector('span:last-child').textContent = '暂无数据';
+    }
+
+    // ---- Stats: days counted (complete days = both in & out punched) ----
+    const now = new Date();
+    const monthStart = getMonthStart(now);
+    const qStart = getQuarterStart(now);
+    const qEnd = getQuarterEnd(now);
+
+    function completeDaysInRange(start, end){
+      return Object.keys(records).filter(k=>{
+        const d = new Date(k+'T00:00:00');
+        if(d < start || d > end) return false;
+        const r = records[k];
+        return !!(r.in && r.out);
+      }).length;
+    }
+
+    const monthCompleteDays = completeDaysInRange(monthStart, now);
+    const quarterCompleteDays = completeDaysInRange(qStart, now);
+    document.getElementById('statMonthDays').innerHTML = `${monthCompleteDays}<span class="sb-unit">天</span>`;
+    document.getElementById('statQuarterDays').innerHTML = `${quarterCompleteDays}<span class="sb-unit">天</span>`;
+
+    // ---- Days left in quarter (weekdays only, not counting today) ----
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate()+1);
+    tomorrow.setHours(0,0,0,0);
+    const daysLeft = tomorrow <= qEnd ? countWeekdays(tomorrow, qEnd) : 0;
+    document.getElementById('statDaysLeft').innerHTML = `${daysLeft}<span class="sb-unit">个工作日</span>`;
+
+    // ---- Current diff vs out target (quarter average, using midpoint) ----
+    const outMidpoint = (tgtOutMin + tgtOutMax) / 2;
+    if(avgOut !== null){
+      const diffFromMid = avgOut - outMidpoint; // negative = earlier than target
+      const absDiff = Math.round(Math.abs(diffFromMid));
+      document.getElementById('statDiffMin').textContent =
+        diffFromMid < -0.5 ? `早 ${absDiff} 分` : (diffFromMid > 0.5 ? `晚 ${absDiff} 分` : '持平');
+    } else {
+      document.getElementById('statDiffMin').textContent = '--';
+    }
+
+    // ---- Advice: suggested leave time for remaining workdays this quarter ----
+    // Use quarter-range out-records as the basis (regardless of currentRangeOut selector)
+    const qOutRecs = getRecordsInRange('quarter').filter(r=>r.out);
+    const qOutMins = qOutRecs.map(r=>timeToMinutes(r.out));
+    const qOutCount = qOutMins.length;
+    const qOutAvg = average(qOutMins);
+
+    const adviceEl = document.getElementById('adviceTime');
+    const adviceSubEl = document.getElementById('adviceSub');
+
+    if(daysLeft <= 0){
+      adviceEl.textContent = '本季已结束';
+      adviceSubEl.textContent = '当前季度的工作日已经走完，等下个季度开始重新计算吧。';
+    } else if(qOutCount === 0){
+      adviceEl.textContent = `${targets.outMin}~${targets.outMax}`;
+      adviceSubEl.innerHTML = `还没有本季度下班记录，先按目标区间打卡，<b>${daysLeft}</b> 个工作日后再看建议。`;
+    } else {
+      // Total workdays elapsed so far this quarter (approx = days with an out-record, but
+      // for the formula we need "planned total workdays in quarter" = elapsed + daysLeft
+      const totalWorkdaysPlanned = qOutCount + daysLeft;
+      // required average for remaining days to pull overall average to outMidpoint:
+      // (outMidpoint * totalWorkdaysPlanned - qOutAvg * qOutCount) / daysLeft
+      const requiredAvg = (outMidpoint * totalWorkdaysPlanned - qOutAvg * qOutCount) / daysLeft;
+      const clamped = Math.max(0, Math.min(24*60-1, requiredAvg));
+
+      adviceEl.textContent = minutesToTime(clamped);
+
+      let tone;
+      if(requiredAvg < tgtOutMin - 10){
+        tone = `目前平均偏早（已记录均值 ${minutesToTime(qOutAvg)}），按这个节奏剩下的 <b>${daysLeft}</b> 个工作日可以适当晚走一些，把均值拉回区间。`;
+      } else if(requiredAvg > tgtOutMax + 10){
+        tone = `目前平均偏晚（已记录均值 ${minutesToTime(qOutAvg)}），建议剩下的 <b>${daysLeft}</b> 个工作日尽量早一点走，把均值拉回区间。`;
+      } else {
+        tone = `按当前均值 ${minutesToTime(qOutAvg)} 推算，剩下 <b>${daysLeft}</b> 个工作日维持这个点下班，本季度均值就能落在目标区间。`;
+      }
+      adviceSubEl.innerHTML = tone;
+    }
+
+    // ---- History list ----
+    const allRecs = Object.keys(records)
+      .sort((a,b)=> a < b ? 1 : -1)
+      .slice(0, 14)
+      .map(k=>({date:k, ...records[k]}));
+
+    const histList = document.getElementById('historyList');
+    if(allRecs.length === 0){
+      histList.innerHTML = '<div class="empty-state">还没有打卡记录，点击上方按钮开始记录</div>';
+    } else {
+      let html = '<div class="history-row head"><span>日期</span><span>晨潮</span><span>暮潮</span><span class="hr-del">✕</span></div>';
+      allRecs.forEach(r=>{
+        const d = new Date(r.date+'T00:00:00');
+        const label = `${d.getMonth()+1}/${d.getDate()}`;
+        html += `<div class="history-row">
+          <span class="hr-date">${label}</span>
+          <span class="hr-time ${r.in?'':'empty'}">${r.in || '—'}</span>
+          <span class="hr-time ${r.out?'':'empty'}">${r.out || '—'}</span>
+          <button class="hr-del" data-date="${r.date}" title="删除这天">✕</button>
+        </div>`;
+      });
+      histList.innerHTML = html;
+    }
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
