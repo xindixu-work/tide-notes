@@ -332,6 +332,34 @@
     padding: 8px 0;
   }
 
+  /* ===== Quota list ===== */
+  .quota-row {
+    display: grid;
+    grid-template-columns: 1fr 60px 28px;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 12px;
+  }
+  .quota-row + .quota-row { border-top: 1px solid var(--line); }
+  .quota-row .qr-val { font-family: var(--font-mono); }
+  .quota-row .qr-del {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-size: 13px;
+    text-align: center;
+    padding: 2px;
+    border-radius: 3px;
+  }
+  .quota-row .qr-del:hover { background: var(--danger-light); color: var(--danger); }
+  .quota-empty {
+    font-size: 12px;
+    color: var(--ink-soft);
+    padding: 4px 0;
+  }
+
   /* ===== Punch buttons ===== */
   .punch-row {
     display: grid;
@@ -667,17 +695,34 @@
   </div>
 
   <!-- MONTHLY QUOTA (accounts for 调休/holidays making weekday count inaccurate) -->
-  <div class="section-title">📅 当月应到天数</div>
+  <div class="section-title">📅 应到天数（按月设置）</div>
   <div class="target-card">
     <div class="target-row" style="border-top:none;">
-      <span class="tr-name" id="quotaMonthLabel">2026年6月</span>
+      <span class="tr-name">月份</span>
+      <div class="tr-vals">
+        <input type="month" id="quotaMonthInput" style="font-family:var(--font-mono); font-size:13px; padding:4px 6px; border:1px solid var(--line); border-radius:3px; background:var(--paper); width:130px;">
+      </div>
+    </div>
+    <div class="target-row">
+      <span class="tr-name">应到天数</span>
       <div class="tr-vals">
         <input type="number" id="quotaInput" min="0" max="31" style="width:70px; font-family:var(--font-mono); padding:4px 6px; border:1px solid var(--line); border-radius:3px; background:var(--paper);">
         <span class="tr-sep">天</span>
       </div>
     </div>
-    <div style="font-size:11px; color:var(--ink-soft); margin-top:6px; line-height:1.6;">
-      因为调休不一定是固定的周一到周五，这里手动填这个月实际应出勤的天数，让"剩余天数建议"更准确。不填的话默认按工作日（去掉周六周日）估算。
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button id="quotaSaveBtn" style="flex:1; padding:9px; background:var(--ink); color:var(--paper-raised); border:none; border-radius:3px; font-size:13px; cursor:pointer;">保存这个月</button>
+      <button id="quotaLoadBtn" style="padding:9px 14px; background:var(--paper); color:var(--ink-soft); border:1px solid var(--line); border-radius:3px; font-size:13px; cursor:pointer;">读取已有</button>
+    </div>
+    <div id="quotaMsg" style="font-size:12px; color:var(--good); margin-top:8px; display:none;"></div>
+
+    <div style="font-size:11px; color:var(--ink-soft); margin-top:14px; line-height:1.6;">
+      因为调休不一定是固定的周一到周五，可以给任意月份（过去补录历史数据，或者未来提前设置）手动填实际应出勤天数，让"剩余天数建议"更准确。没设置的月份默认按工作日（去掉周六周日）估算。
+    </div>
+
+    <div id="quotaListWrap" style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--line);">
+      <div style="font-size:11px; color:var(--ink-soft); margin-bottom:6px;">已设置的月份</div>
+      <div id="quotaList"></div>
     </div>
   </div>
 
@@ -856,25 +901,76 @@
     });
   });
 
-  // ===== Init monthly quota input =====
-  function currentMonthKey(){ return monthKeyOf(new Date()); }
-  function refreshQuotaUI(){
-    const mk = currentMonthKey();
-    const now = new Date();
-    document.getElementById('quotaMonthLabel').textContent = `${now.getFullYear()}年${now.getMonth()+1}月`;
-    document.getElementById('quotaInput').value = quotas[mk] != null ? quotas[mk] : '';
+  // ===== Monthly quota: manual month picker + days input + list with delete =====
+  document.getElementById('quotaMonthInput').value = monthKeyOf(new Date());
+
+  function showQuotaMsg(text, isError){
+    const el = document.getElementById('quotaMsg');
+    el.textContent = text;
+    el.style.color = isError ? 'var(--danger)' : 'var(--good)';
+    el.style.display = 'block';
+    clearTimeout(el._t);
+    el._t = setTimeout(()=>{ el.style.display = 'none'; }, 2500);
   }
-  refreshQuotaUI();
-  document.getElementById('quotaInput').addEventListener('change', (e)=>{
-    const mk = currentMonthKey();
-    const val = parseInt(e.target.value, 10);
-    if(e.target.value === '' ){
-      delete quotas[mk];
-    } else if(!isNaN(val)){
-      quotas[mk] = val;
+
+  function renderQuotaList(){
+    const wrap = document.getElementById('quotaList');
+    const keys = Object.keys(quotas).sort((a,b)=> b < a ? -1 : 1).sort((a,b)=> a < b ? 1 : -1);
+    if(keys.length === 0){
+      wrap.innerHTML = '<div class="quota-empty">还没有设置任何月份</div>';
+      return;
     }
+    let html = '';
+    keys.forEach(mk=>{
+      const [y,m] = mk.split('-');
+      html += `<div class="quota-row">
+        <span>${y}年${parseInt(m,10)}月</span>
+        <span class="qr-val">${quotas[mk]} 天</span>
+        <button class="qr-del" data-mk="${mk}" title="删除">✕</button>
+      </div>`;
+    });
+    wrap.innerHTML = html;
+  }
+  renderQuotaList();
+
+  document.getElementById('quotaLoadBtn').addEventListener('click', ()=>{
+    const mk = document.getElementById('quotaMonthInput').value;
+    if(!mk){ showQuotaMsg('请先选择月份', true); return; }
+    if(quotas[mk] != null){
+      document.getElementById('quotaInput').value = quotas[mk];
+      showQuotaMsg('已读取该月设置');
+    } else {
+      document.getElementById('quotaInput').value = '';
+      showQuotaMsg('该月还没有设置过');
+    }
+  });
+
+  document.getElementById('quotaSaveBtn').addEventListener('click', ()=>{
+    const mk = document.getElementById('quotaMonthInput').value;
+    if(!mk){ showQuotaMsg('请先选择月份', true); return; }
+    const raw = document.getElementById('quotaInput').value;
+    const val = parseInt(raw, 10);
+    if(raw === '' || isNaN(val)){
+      showQuotaMsg('请填写天数', true);
+      return;
+    }
+    quotas[mk] = val;
     saveQuotas(quotas);
+    renderQuotaList();
+    showQuotaMsg(`已保存 ${mk}：${val} 天`);
     render();
+  });
+
+  document.getElementById('quotaList').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.qr-del');
+    if(!btn || !btn.dataset.mk) return;
+    const mk = btn.dataset.mk;
+    if(confirm(`删除 ${mk} 的应到天数设置？`)){
+      delete quotas[mk];
+      saveQuotas(quotas);
+      renderQuotaList();
+      render();
+    }
   });
 
   // ===== Punch buttons =====
@@ -1031,10 +1127,11 @@
 
   document.getElementById('exportBtn').addEventListener('click', ()=>{
     const payload = {
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       records: records,
-      targets: targets
+      targets: targets,
+      quotas: quotas
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
     const url = URL.createObjectURL(blob);
@@ -1061,10 +1158,11 @@
       try {
         const data = JSON.parse(evt.target.result);
         if(!data.records) throw new Error('文件格式不对');
-        const incoming = Object.keys(data.records).length;
+        const incomingDays = Object.keys(data.records).length;
+        const incomingQuotas = data.quotas ? Object.keys(data.quotas).length : 0;
         const merge = confirm(
-          `备份文件中有 ${incoming} 天的记录。\n\n` +
-          `点"确定"= 合并到现有数据（同一天会被备份文件覆盖）\n` +
+          `备份文件中有 ${incomingDays} 天的记录，${incomingQuotas} 个月的应到天数设置。\n\n` +
+          `点"确定"= 合并到现有数据（重复的会被备份文件覆盖）\n` +
           `点"取消"= 放弃导入`
         );
         if(!merge) return;
@@ -1078,15 +1176,21 @@
           document.getElementById('targetOutMin').value = targets.outMin;
           document.getElementById('targetOutMax').value = targets.outMax;
         }
+        if(data.quotas){
+          quotas = Object.assign({}, quotas, data.quotas);
+          saveQuotas(quotas);
+          renderQuotaList();
+        }
         refreshPunchButtons();
         render();
-        showBackupMsg(`已导入 ${incoming} 天记录`);
+        showBackupMsg(`已导入 ${incomingDays} 天记录、${incomingQuotas} 个月配额`);
       } catch(err){
         showBackupMsg('导入失败：文件格式不正确', true);
       }
       e.target.value = '';
     };
     reader.readAsText(file);
+
   });
 
   // ===== Stats =====
