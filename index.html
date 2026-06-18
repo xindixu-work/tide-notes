@@ -521,6 +521,27 @@
     font-size: 13px;
   }
 
+  /* ===== Monthly summary table ===== */
+  .month-row {
+    display: grid;
+    grid-template-columns: 64px 1fr 1fr 1fr 1fr;
+    gap: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    align-items: center;
+  }
+  .month-row + .month-row { border-top: 1px solid var(--line); }
+  .month-row.head {
+    font-size: 10px;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--paper);
+  }
+  .month-row .mr-label { font-family: var(--font-mono); font-weight: 600; }
+  .month-row .mr-val { font-family: var(--font-mono); }
+  .month-row .mr-val.dim { color: var(--ink-soft); }
+
   .footer-note {
     font-size: 11px;
     color: var(--ink-soft);
@@ -726,9 +747,16 @@
     </div>
   </div>
 
+  <!-- MONTHLY SUMMARY: all months with data, days counted + averages + 在岗时长 -->
+  <div class="section-title">📊 月度总览</div>
+  <div class="history-list" id="monthlySummaryList" style="margin-bottom: 18px;"></div>
+
   <!-- HISTORY -->
-  <div class="section-title">📖 本季流水</div>
-  <div class="history-list" id="historyList"></div>
+  <div class="section-title" id="historyToggle" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+    <span>📖 本季流水</span>
+    <span id="historyToggleArrow" style="font-size:11px;">展开 ▾</span>
+  </div>
+  <div class="history-list" id="historyList" style="display:none;"></div>
 
   <!-- PAST QUARTERS ENTRY -->
   <div style="text-align:center; margin: 16px 0;">
@@ -1292,6 +1320,71 @@
     });
   }
 
+  // ===== Monthly summary: every month that has ANY data, with complete-day count + averages + 在岗时长 =====
+  function formatDuration(mins){
+    if(mins == null) return '--';
+    const h = Math.floor(mins/60);
+    const m = Math.round(mins%60);
+    return `${h}时${String(m).padStart(2,'0')}分`;
+  }
+
+  function buildMonthlySummary(){
+    // find all distinct year-month combos that have at least one record
+    const monthSet = new Set();
+    Object.keys(records).forEach(k=>{
+      monthSet.add(k.slice(0,7)); // "YYYY-MM"
+    });
+    const monthKeys = [...monthSet].sort((a,b)=> a < b ? 1 : -1); // newest first
+
+    return monthKeys.map(mk=>{
+      const [y, m] = mk.split('-').map(Number);
+      const mStart = new Date(y, m-1, 1);
+      const mEnd = new Date(y, m, 0); mEnd.setHours(23,59,59,999);
+
+      const inMins = [], outMins = [], onDutyMins = [];
+      let completeDays = 0;
+      Object.keys(records).forEach(k=>{
+        if(!k.startsWith(mk)) return;
+        const r = records[k];
+        if(r.in) inMins.push(timeToMinutes(r.in));
+        if(r.out) outMins.push(timeToMinutes(r.out));
+        if(r.in && r.out){
+          completeDays++;
+          const dur = timeToMinutes(r.out) - timeToMinutes(r.in);
+          if(dur > 0) onDutyMins.push(dur);
+        }
+      });
+
+      return {
+        mk, year:y, month:m,
+        completeDays,
+        avgIn: average(inMins),
+        avgOut: average(outMins),
+        avgOnDuty: average(onDutyMins)
+      };
+    });
+  }
+
+  function renderMonthlySummary(){
+    const wrap = document.getElementById('monthlySummaryList');
+    const data = buildMonthlySummary();
+    if(data.length === 0){
+      wrap.innerHTML = '<div class="empty-state">还没有任何记录</div>';
+      return;
+    }
+    let html = '<div class="month-row head"><span>月份</span><span>打卡天数</span><span>均晨潮</span><span>均暮潮</span><span>均在岗</span></div>';
+    data.forEach(d=>{
+      html += `<div class="month-row">
+        <span class="mr-label">${d.year}/${String(d.month).padStart(2,'0')}</span>
+        <span class="mr-val">${d.completeDays} 天</span>
+        <span class="mr-val dim">${d.avgIn!=null?minutesToTime(d.avgIn):'—'}</span>
+        <span class="mr-val dim">${d.avgOut!=null?minutesToTime(d.avgOut):'—'}</span>
+        <span class="mr-val">${formatDuration(d.avgOnDuty)}</span>
+      </div>`;
+    });
+    wrap.innerHTML = html;
+  }
+
   function renderPastQuarters(){
     const panel = document.getElementById('pastQuarterPanel');
     const data = buildPastQuartersData();
@@ -1328,6 +1421,15 @@
     panel.style.display = willShow ? 'block' : 'none';
   });
 
+  // ===== History list collapse/expand =====
+  document.getElementById('historyToggle').addEventListener('click', ()=>{
+    const list = document.getElementById('historyList');
+    const arrow = document.getElementById('historyToggleArrow');
+    const willShow = list.style.display === 'none';
+    list.style.display = willShow ? 'block' : 'none';
+    arrow.textContent = willShow ? '收起 ▴' : '展开 ▾';
+  });
+
   function renderGauge(trackId, dotMinutes, zoneMinMin, zoneMinMax, lo, hi){
     // lo/hi define the gauge's full visual range in minutes-from-midnight
     const track = document.getElementById(trackId);
@@ -1359,6 +1461,7 @@
 
   function render(){
     refreshPunchButtons();
+    renderMonthlySummary();
 
     // ---- IN gauge ----
     const recsIn = getRecordsInRange(currentRangeIn).filter(r=>r.in);
