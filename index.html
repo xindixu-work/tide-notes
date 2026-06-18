@@ -293,6 +293,45 @@
     display: none;
   }
 
+  /* ===== Past quarter summary ===== */
+  .pq-card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .pq-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .pq-title .pq-overall {
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-weight: 400;
+  }
+  .pq-month-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 1fr;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .pq-month-row + .pq-month-row { border-top: 1px dashed var(--line); }
+  .pq-month-row .pq-val { font-family: var(--font-mono); color: var(--ink); }
+  .pq-empty {
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: center;
+    padding: 8px 0;
+  }
+
   /* ===== Punch buttons ===== */
   .punch-row {
     display: grid;
@@ -524,7 +563,7 @@
   <!-- ADVICE: suggested leave time for remaining workdays -->
   <div class="advice-card">
     <div class="advice-top">
-      <span class="advice-label">本季度剩余工作日建议</span>
+      <span class="advice-label">本季度剩余应到日建议</span>
     </div>
     <div class="advice-time" id="adviceTime">--:--</div>
     <div class="advice-sub" id="adviceSub">数据不足，先记录几天再看建议</div>
@@ -546,7 +585,7 @@
     </div>
     <div class="stat-box">
       <div class="sb-num" id="statDiffMin">--</div>
-      <div class="sb-label">当前距下班目标</div>
+      <div class="sb-label">当前距暮潮目标</div>
     </div>
   </div>
 
@@ -610,7 +649,7 @@
   <div class="section-title">目标设置</div>
   <div class="target-card">
     <div class="target-row">
-      <span class="tr-name">上班目标</span>
+      <span class="tr-name">晨潮目标</span>
       <div class="tr-vals">
         <input type="time" id="targetInMin" value="09:45">
         <span class="tr-sep">–</span>
@@ -618,7 +657,7 @@
       </div>
     </div>
     <div class="target-row">
-      <span class="tr-name">下班目标</span>
+      <span class="tr-name">暮潮目标</span>
       <div class="tr-vals">
         <input type="time" id="targetOutMin" value="19:45">
         <span class="tr-sep">–</span>
@@ -627,9 +666,30 @@
     </div>
   </div>
 
+  <!-- MONTHLY QUOTA (accounts for 调休/holidays making weekday count inaccurate) -->
+  <div class="section-title">📅 当月应到天数</div>
+  <div class="target-card">
+    <div class="target-row" style="border-top:none;">
+      <span class="tr-name" id="quotaMonthLabel">2026年6月</span>
+      <div class="tr-vals">
+        <input type="number" id="quotaInput" min="0" max="31" style="width:70px; font-family:var(--font-mono); padding:4px 6px; border:1px solid var(--line); border-radius:3px; background:var(--paper);">
+        <span class="tr-sep">天</span>
+      </div>
+    </div>
+    <div style="font-size:11px; color:var(--ink-soft); margin-top:6px; line-height:1.6;">
+      因为调休不一定是固定的周一到周五，这里手动填这个月实际应出勤的天数，让"剩余天数建议"更准确。不填的话默认按工作日（去掉周六周日）估算。
+    </div>
+  </div>
+
   <!-- HISTORY -->
-  <div class="section-title">最近记录</div>
+  <div class="section-title">📖 本季流水</div>
   <div class="history-list" id="historyList"></div>
+
+  <!-- PAST QUARTERS ENTRY -->
+  <div style="text-align:center; margin: 16px 0;">
+    <span class="edit-toggle" id="pastQuarterToggle" style="font-size:12px;">📊 查看过去的季度数据</span>
+  </div>
+  <div id="pastQuarterPanel" style="display:none; margin-bottom:18px;"></div>
 
   <div class="section-title">💾 备份与同步</div>
   <div class="target-card">
@@ -653,6 +713,8 @@
 (function(){
   const STORAGE_KEY = 'punch_records_v1';
   const TARGET_KEY = 'punch_targets_v1';
+  const QUOTA_KEY = 'punch_month_quota_v1'; // { "2026-06": 21, "2026-07": 22, ... }
+  const RETENTION_DAYS = 365;
 
   function loadRecords(){
     try {
@@ -671,6 +733,34 @@
   }
   function saveTargets(t){
     localStorage.setItem(TARGET_KEY, JSON.stringify(t));
+  }
+  function loadQuotas(){
+    try {
+      const raw = localStorage.getItem(QUOTA_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch(e){ return {}; }
+  }
+  function saveQuotas(q){
+    localStorage.setItem(QUOTA_KEY, JSON.stringify(q));
+  }
+  function monthKeyOf(d){
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+
+  // Remove records older than RETENTION_DAYS (keeps storage tidy; 365 days is plenty for year-over-year compare)
+  function pruneOldRecords(records){
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+    cutoff.setHours(0,0,0,0);
+    let changed = false;
+    Object.keys(records).forEach(k=>{
+      const d = new Date(k+'T00:00:00');
+      if(d < cutoff){
+        delete records[k];
+        changed = true;
+      }
+    });
+    return changed;
   }
 
   function todayKey(d){
@@ -736,10 +826,14 @@
   }
 
   let records = loadRecords();
+  if(pruneOldRecords(records)){
+    saveRecords(records);
+  }
   let targets = loadTargets() || {
     inMin: '09:45', inMax: '09:55',
     outMin: '19:45', outMax: '20:00'
   };
+  let quotas = loadQuotas(); // { "2026-06": 21 }
 
   let currentRangeIn = 'quarter';
   let currentRangeOut = 'quarter';
@@ -760,6 +854,27 @@
       saveTargets(targets);
       render();
     });
+  });
+
+  // ===== Init monthly quota input =====
+  function currentMonthKey(){ return monthKeyOf(new Date()); }
+  function refreshQuotaUI(){
+    const mk = currentMonthKey();
+    const now = new Date();
+    document.getElementById('quotaMonthLabel').textContent = `${now.getFullYear()}年${now.getMonth()+1}月`;
+    document.getElementById('quotaInput').value = quotas[mk] != null ? quotas[mk] : '';
+  }
+  refreshQuotaUI();
+  document.getElementById('quotaInput').addEventListener('change', (e)=>{
+    const mk = currentMonthKey();
+    const val = parseInt(e.target.value, 10);
+    if(e.target.value === '' ){
+      delete quotas[mk];
+    } else if(!isNaN(val)){
+      quotas[mk] = val;
+    }
+    saveQuotas(quotas);
+    render();
   });
 
   // ===== Punch buttons =====
@@ -1003,6 +1118,112 @@
     return sum/values.length;
   }
 
+  // ===== Past quarters summary (month + quarter averages only, no daily detail) =====
+  function getQuarterLabel(year, qIdx){
+    return `${year} Q${qIdx+1}`;
+  }
+  function getQuarterRangeByIndex(year, qIdx){
+    const start = new Date(year, qIdx*3, 1);
+    const endNext = new Date(year, qIdx*3+3, 1);
+    endNext.setDate(endNext.getDate()-1);
+    endNext.setHours(23,59,59,999);
+    return [start, endNext];
+  }
+
+  function buildPastQuartersData(){
+    const now = new Date();
+    const curQStart = getQuarterStart(now);
+    // collect all distinct year-quarter combos present in records, excluding current quarter, within retention window
+    const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+    const combos = new Set();
+    Object.keys(records).forEach(k=>{
+      const d = new Date(k+'T00:00:00');
+      if(d >= curQStart) return; // skip current quarter
+      if(d < cutoff) return; // outside retention
+      const qIdx = Math.floor(d.getMonth()/3);
+      combos.add(`${d.getFullYear()}-${qIdx}`);
+    });
+    const list = [...combos].map(s=>{
+      const [y,q] = s.split('-').map(Number);
+      return {year:y, qIdx:q};
+    }).sort((a,b)=> (b.year-a.year) || (b.qIdx-a.qIdx));
+
+    return list.map(({year,qIdx})=>{
+      const [qStart, qEnd] = getQuarterRangeByIndex(year, qIdx);
+      // month breakdown
+      const months = [];
+      for(let m = qIdx*3; m <= qIdx*3+2; m++){
+        const mStart = new Date(year, m, 1);
+        const mEnd = new Date(year, m+1, 0); mEnd.setHours(23,59,59,999);
+        const inMins = [], outMins = [];
+        Object.keys(records).forEach(k=>{
+          const d = new Date(k+'T00:00:00');
+          if(d < mStart || d > mEnd) return;
+          if(records[k].in) inMins.push(timeToMinutes(records[k].in));
+          if(records[k].out) outMins.push(timeToMinutes(records[k].out));
+        });
+        months.push({
+          label: `${m+1}月`,
+          avgIn: average(inMins),
+          avgOut: average(outMins),
+          count: Object.keys(records).filter(k=>{
+            const d = new Date(k+'T00:00:00');
+            return d >= mStart && d <= mEnd && records[k].in && records[k].out;
+          }).length
+        });
+      }
+      const qInMins = [], qOutMins = [];
+      Object.keys(records).forEach(k=>{
+        const d = new Date(k+'T00:00:00');
+        if(d < qStart || d > qEnd) return;
+        if(records[k].in) qInMins.push(timeToMinutes(records[k].in));
+        if(records[k].out) qOutMins.push(timeToMinutes(records[k].out));
+      });
+      return {
+        label: getQuarterLabel(year, qIdx),
+        avgIn: average(qInMins),
+        avgOut: average(qOutMins),
+        months
+      };
+    });
+  }
+
+  function renderPastQuarters(){
+    const panel = document.getElementById('pastQuarterPanel');
+    const data = buildPastQuartersData();
+    if(data.length === 0){
+      panel.innerHTML = '<div class="pq-card"><div class="pq-empty">暂无过去季度的记录</div></div>';
+      return;
+    }
+    let html = '';
+    data.forEach(q=>{
+      html += `<div class="pq-card">
+        <div class="pq-title">
+          <span>${q.label}</span>
+          <span class="pq-overall">季度均值 ${q.avgIn!=null?minutesToTime(q.avgIn):'--'} / ${q.avgOut!=null?minutesToTime(q.avgOut):'--'}</span>
+        </div>
+        <div class="pq-month-row" style="color:var(--ink-soft); font-size:11px;">
+          <span>月份</span><span>晨潮均值</span><span>暮潮均值</span>
+        </div>`;
+      q.months.forEach(m=>{
+        html += `<div class="pq-month-row">
+          <span>${m.label}</span>
+          <span class="pq-val">${m.avgIn!=null?minutesToTime(m.avgIn):'—'}</span>
+          <span class="pq-val">${m.avgOut!=null?minutesToTime(m.avgOut):'—'}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+    panel.innerHTML = html;
+  }
+
+  document.getElementById('pastQuarterToggle').addEventListener('click', ()=>{
+    const panel = document.getElementById('pastQuarterPanel');
+    const willShow = panel.style.display === 'none';
+    if(willShow) renderPastQuarters();
+    panel.style.display = willShow ? 'block' : 'none';
+  });
+
   function renderGauge(trackId, dotMinutes, zoneMinMin, zoneMinMax, lo, hi){
     // lo/hi define the gauge's full visual range in minutes-from-midnight
     const track = document.getElementById(trackId);
@@ -1065,7 +1286,7 @@
       let msg;
       if(diffClass === 'good') msg = '稳，维持现状';
       else if(diffClass === 'warn') msg = '偏卷了，明天可以晚一点到';
-      else msg = '偏晚了，建议提前一些打卡';
+      else msg = '偏晚了，建议提前一些记录';
       pill.querySelector('span:last-child').textContent = msg;
     } else {
       document.getElementById('avgInVal').textContent = '--:--';
@@ -1105,7 +1326,7 @@
       let msg;
       if(diffClass === 'good') msg = '稳，维持现状';
       else if(diffClass === 'bad') msg = '走太早了，明天稍微晚点走';
-      else msg = '偏卷了，可以提前一些下班';
+      else msg = '偏卷了，可以提前一些记录';
       pill.querySelector('span:last-child').textContent = msg;
     } else {
       document.getElementById('avgOutVal').textContent = '--:--';
@@ -1135,12 +1356,43 @@
     document.getElementById('statMonthDays').innerHTML = `${monthCompleteDays}<span class="sb-unit">天</span>`;
     document.getElementById('statQuarterDays').innerHTML = `${quarterCompleteDays}<span class="sb-unit">天</span>`;
 
-    // ---- Days left in quarter (weekdays only, not counting today) ----
+    // ---- Days left in quarter, factoring in manual monthly quotas (调休 aware) ----
+    // For each month touched by [tomorrow, qEnd], compute remaining workdays in that month;
+    // if a manual quota exists for that month, scale the month's remaining days proportionally
+    // (remaining_weekdays_in_month / total_weekdays_in_month_so_far_known) so 调休 swaps roughly net out.
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate()+1);
     tomorrow.setHours(0,0,0,0);
-    const daysLeft = tomorrow <= qEnd ? countWeekdays(tomorrow, qEnd) : 0;
-    document.getElementById('statDaysLeft').innerHTML = `${daysLeft}<span class="sb-unit">个工作日</span>`;
+
+    function remainingDaysWithQuota(start, end){
+      if(start > end) return 0;
+      let total = 0;
+      let cur = new Date(start.getFullYear(), start.getMonth(), 1);
+      while(cur <= end){
+        const mk = monthKeyOf(cur);
+        const monthStartD = new Date(cur.getFullYear(), cur.getMonth(), 1);
+        const monthEndD = new Date(cur.getFullYear(), cur.getMonth()+1, 0);
+        const rangeStart = start > monthStartD ? start : monthStartD;
+        const rangeEnd = end < monthEndD ? end : monthEndD;
+        if(rangeStart <= rangeEnd){
+          if(quotas[mk] != null){
+            // manual quota set: scale by the fraction of the month remaining (weekday-based ratio)
+            const totalWeekdaysInMonth = countWeekdays(monthStartD, monthEndD);
+            const remainingWeekdaysInMonth = countWeekdays(rangeStart, rangeEnd);
+            const ratio = totalWeekdaysInMonth > 0 ? remainingWeekdaysInMonth / totalWeekdaysInMonth : 0;
+            total += quotas[mk] * ratio;
+          } else {
+            total += countWeekdays(rangeStart, rangeEnd);
+          }
+        }
+        cur = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
+      }
+      return Math.round(total);
+    }
+
+    const daysLeft = tomorrow <= qEnd ? remainingDaysWithQuota(tomorrow, qEnd) : 0;
+    const usingQuota = quotas[monthKeyOf(now)] != null;
+    document.getElementById('statDaysLeft').innerHTML = `${daysLeft}<span class="sb-unit">个应到日${usingQuota?'*':''}</span>`;
 
     // ---- Current diff vs out target (quarter average, using midpoint) ----
     const outMidpoint = (tgtOutMin + tgtOutMax) / 2;
@@ -1168,7 +1420,7 @@
       adviceSubEl.textContent = '当前季度的工作日已经走完，等下个季度开始重新计算吧。';
     } else if(qOutCount === 0){
       adviceEl.textContent = `${targets.outMin}~${targets.outMax}`;
-      adviceSubEl.innerHTML = `还没有本季度下班记录，先按目标区间打卡，<b>${daysLeft}</b> 个工作日后再看建议。`;
+      adviceSubEl.innerHTML = `还没有本季度的暮潮记录，先按目标区间记录，<b>${daysLeft}</b> 个应到日后再看建议。`;
     } else {
       // Total workdays elapsed so far this quarter (approx = days with an out-record, but
       // for the formula we need "planned total workdays in quarter" = elapsed + daysLeft
@@ -1186,20 +1438,23 @@
       } else if(requiredAvg > tgtOutMax + 10){
         tone = `目前平均偏晚（已记录均值 ${minutesToTime(qOutAvg)}），建议剩下的 <b>${daysLeft}</b> 个工作日尽量早一点走，把均值拉回区间。`;
       } else {
-        tone = `按当前均值 ${minutesToTime(qOutAvg)} 推算，剩下 <b>${daysLeft}</b> 个工作日维持这个点下班，本季度均值就能落在目标区间。`;
+        tone = `按当前均值 ${minutesToTime(qOutAvg)} 推算，剩下 <b>${daysLeft}</b> 个应到日维持这个点记录，本季度均值就能落在目标区间。`;
       }
       adviceSubEl.innerHTML = tone;
     }
 
-    // ---- History list ----
+    // ---- History list: show ALL records within current quarter (no cap) ----
     const allRecs = Object.keys(records)
+      .filter(k=>{
+        const d = new Date(k+'T00:00:00');
+        return d >= qStart && d <= now;
+      })
       .sort((a,b)=> a < b ? 1 : -1)
-      .slice(0, 14)
       .map(k=>({date:k, ...records[k]}));
 
     const histList = document.getElementById('historyList');
     if(allRecs.length === 0){
-      histList.innerHTML = '<div class="empty-state">还没有打卡记录，点击上方按钮开始记录</div>';
+      histList.innerHTML = '<div class="empty-state">本季度还没有记录，点击上方按钮开始记录</div>';
     } else {
       let html = '<div class="history-row head"><span>日期</span><span>晨潮</span><span>暮潮</span><span class="hr-del">✕</span></div>';
       allRecs.forEach(r=>{
